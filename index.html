@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>مواقع الفرص الاستثمارية - المدينة المنورة</title>
+<style>
+  :root{
+    --bg:#0f1115; --text:#eef4f2; --muted:#d3e1de;
+    --pane:#406B5F; --card:#355a51; --card-border:#2f4e47;
+    --accent:#1a73e8;
+    --parcel:#0b6b3a; --parcel-stroke:#064f2a;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,Arial}
+  .layout{display:flex;height:100vh;overflow:hidden}
+
+  /* الشريط (سطح مكتب) */
+  .sidebar{
+    width:380px;min-width:320px;max-width:520px;background:var(--pane);
+    padding:14px 14px 18px;overflow:auto;border-inline-end:1px solid var(--card-border);
+  }
+  .sidebar h1{font-size:18px;margin:6px 0 10px;text-align:center}
+  .logo-wrap{display:flex;justify-content:center;margin-top:6px}
+  .logo{max-height:42px;max-width:80%;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,.25))}
+  .card{background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:12px;margin:10px 0}
+  .muted{color:var(--muted);font-size:12px}
+  .btn{border:0;border-radius:10px;padding:6px 10px;background:var(--accent);color:#fff;cursor:pointer;font-size:12px}
+  .btn.secondary{background:#274b43;color:#eff7f5;border:1px solid var(--card-border)}
+  .btn.ghost{background:#22453d;color:#e6f3f0;border:1px solid var(--card-border)}
+  .btn:active{transform:scale(.98)}
+  .parcel-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+  .parcel-name{font-weight:800}
+  .stat-grid{display:grid;grid-template-columns:auto 1fr;gap:6px;font-size:13px}
+  #map{flex:1}
+
+  /* زر السهم (يظهر في الجوال فقط) */
+  .toggle{
+    position:fixed; top:calc(env(safe-area-inset-top, 8px) + 8px);
+    right:12px; z-index:10002;
+    width:44px; height:44px; border-radius:12px; border:0;
+    background:#fff; color:#0b3d2f; font-size:20px; font-weight:900;
+    box-shadow:0 10px 25px rgba(0,0,0,.28); display:none; align-items:center; justify-content:center;
+  }
+  .toggle:active{transform:scale(.98)}
+
+  /* وضع الجوال: اللوحة تصبح خارج الشاشة يمينًا 100% وتدخل بالسحب */
+  @media (max-width: 900px){
+    .toggle{display:flex}
+    .layout{position:relative}
+    .sidebar{
+      position:fixed; top:0; bottom:0; right:0; left:auto;
+      width:min(86vw, 420px);
+      transform:translateX(100%);           /* مخفية تمامًا خارج الشاشة */
+      transition:transform .28s ease; z-index:10001;
+      border-inline-end:none; border-inline-start:1px solid var(--card-border);
+      box-shadow:-22px 0 40px rgba(0,0,0,.35);
+    }
+    .sidebar.open{ transform:translateX(0); } /* عرض اللوحة */
+    #map{width:100vw}
+  }
+
+  /* نافذة معلومات القطعة بلون أخضر واضح */
+  .iw-green{color:var(--parcel); font-weight:700; line-height:1.6}
+  .iw-green .label{font-weight:600}
+</style>
+
+<div class="layout">
+  <aside id="side" class="sidebar">
+    <div id="logoSlot" class="logo-wrap" style="display:none">
+      <img id="logoImg" class="logo" alt="logo">
+    </div>
+    <h1>مواقع الفرص الاستثمارية - المدينة المنورة</h1>
+
+    <div id="parcelsPanel" class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+        <div><b>الأراضي</b></div>
+        <div class="muted" id="totalArea">الإجمالي: — م²</div>
+      </div>
+      <div id="parcelsList"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn ghost" id="showAll">إظهار الكل</button>
+        <button class="btn secondary" id="hideAll">إخفاء الكل</button>
+        <button class="btn" id="fitAll">تكبير لكل القطع</button>
+      </div>
+      <div class="muted" style="margin-top:8px">اختصار: اضغطي اسم الأرض لتكبيرها.</div>
+    </div>
+  </aside>
+
+  <!-- زر السهم: ◀ لفتح / ▶ للإغلاق -->
+  <button id="toggleBtn" class="toggle" aria-label="فتح القائمة">◀</button>
+
+  <div id="map"></div>
+</div>
+
+<script>
+const API_KEY="AIzaSyBQprNIjxk5KSjdGVGQveg2w1ALwgeVS2w";
+const LOGO_URL="data:image/png;base64,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";
+
+/* ستايل الخريطة */
+const snazzyStyle=[
+  {"featureType":"administrative","elementType":"labels.text.fill","stylers":[{"color":"#444444"},{"visibility":"on"}]},
+  {"featureType":"landscape","elementType":"all","stylers":[{"color":"#f2f4f3"}]},
+  {"featureType":"poi","elementType":"all","stylers":[{"visibility":"off"}]},
+  {"featureType":"road","elementType":"all","stylers":[{"saturation":-100},{"lightness":45}]},
+  {"featureType":"road","elementType":"geometry.fill","stylers":[{"visibility":"on"},{"color":"#e3e9e6"}]},
+  {"featureType":"road","elementType":"geometry.stroke","stylers":[{"visibility":"on"},{"color":"#c6d2cc"}]},
+  {"featureType":"transit","elementType":"all","stylers":[{"visibility":"off"}]},
+  {"featureType":"water","elementType":"all","stylers":[{"color":"#406b5f"},{"visibility":"on"}]}
+];
+
+const parcelFill  ='#0b6b3a';
+const parcelStroke='#064f2a';
+
+/* الأراضي */
+const parcelsRaw=[
+ {name:"أرض شوران",coordsStr:"39.652851,24.395801,0 39.653084,24.395402,0 39.655302,24.396487,0 39.655322,24.396548,0 39.655031,24.397049,0 39.654977,24.397063,0 39.654185,24.396676,0 39.653489,24.397871,0 39.653435,24.397886,0 39.652992,24.397669,0 39.650481,24.401977,0 39.650374,24.402007,0 39.646207,24.399969,0 39.646174,24.399872,0 39.646995,24.398465,0 39.647579,24.39875,0 39.647882,24.398229,0 39.648255,24.398411,0 39.649326,24.396574,0 39.648978,24.396404,0 39.649351,24.395765,0 39.650699,24.396424,0 39.650949,24.395997,0 39.651819,24.396422,0 39.652329,24.395545,0 39.652851,24.395801,0"},
+ {name:"مشروع الغرة",coordsStr:"39.723016,24.528056,0 39.722938,24.528214,0 39.722686,24.528211,0 39.722314,24.528825,0 39.722317,24.529074,0 39.721268,24.52901,0 39.720708,24.528945,0 39.720329,24.528268,0 39.718153,24.527196,0 39.718603,24.528636,0 39.717979,24.528526,0 39.716791,24.528189,0 39.714932,24.52759,0 39.714397,24.527365,0 39.714263،24.527286،0 39.714221,24.527179,0 39.716097,24.524386,0 39.723077,24.526431,0 39.723016,24.528056,0"},
+ {name:"أرض الجصة",coordsStr:"39.62815270698835,24.35170933627694,0 39.6293053836133,24.35200949673248,0 39.62954136971668,24.3524649609618,0 39.62802243843447,24.35583645135528,0 39.62738625724258,24.35723302977062,0 39.62730017357199,24.35729354292185,0 39.62385793988482,24.35631937137557,0 39.62379191022077,24.3562495575901,0 39.62470759104565,24.35452585850476,0 39.62537143755905,24.35409665117118,0 39.62599270395448,24.3538182137639,0 39.62627375952981,24.35349207111316,0 39.62656029585098,24.35285168592686,0 39.62659864077514,24.35231600577286,0 39.62675359058083,24.35216454934868,0 39.62690632503219,24.35205770693933,0 39.62729351585195,24.35191163481519,0 39.62754888811935,24.3519801333705,0 39.62791138401607,24.3518129149954,0 39.62815270698835,24.35170933627694,0"},
+ {name:"مشروع مشراف هب",coordsStr:"39.70605734756739,24.46238178512953,0 39.7057549490418,24.46199266329024,0 39.70605986815634,24.46187172310799,0 39.70591101370601,24.46055398151556,0 39.70537870508637,24.45995863696395,0 39.70568000648868,24.45971424843091,0 39.70595103133599,24.45958673978976,0 39.7043328690464,24.45784177467846,0 39.70562691100353,24.4578108783522,0 39.70618683960614,24.4590688371884,0 39.70650415981277,24.46012535045347,0 39.70684897132967,24.46426280022889,0 39.70630476812499,24.46446686287837,0 39.70605734756739,24.46238178512953,0"}
+];
+
+function parseLonLat0(str){
+  const pts=[]; str.trim().split(/\s+/).forEach(tok=>{
+    const p=tok.split(','); if(p.length>=2){const lon=parseFloat(p[0]), lat=parseFloat(p[1]); if(!isNaN(lat)&&!isNaN(lon)) pts.push({lat,lng:lon});}
+  });
+  if(pts.length>2){const a=pts[0],b=pts[pts.length-1]; if(a.lat!==b.lat||a.lng!==b.lng) pts.push({...a});}
+  return pts;
+}
+function fmt(n,dec=0){return (dec?Number(n).toFixed(dec):Math.round(n)).toLocaleString();}
+
+let map, polygons=[], allBounds;
+
+function initMap(){
+  // شعار (اختياري)
+  if (LOGO_URL && LOGO_URL.trim()){
+    const slot=document.getElementById('logoSlot'); const img=document.getElementById('logoImg');
+    img.src=LOGO_URL.trim(); slot.style.display='flex';
+  }
+
+  map=new google.maps.Map(document.getElementById('map'),{
+    center:{lat:24.4686,lng:39.6111}, zoom:12, mapTypeId:'roadmap',
+    streetViewControl:true, fullscreenControl:true, styles:snazzyStyle
+  });
+
+  const list=document.getElementById('parcelsList');
+  let totalArea=0; allBounds=new google.maps.LatLngBounds();
+
+  parcelsRaw.forEach(raw=>{
+    const coords=parseLonLat0(raw.coordsStr);
+    const poly=new google.maps.Polygon({
+      paths:coords, strokeColor:parcelStroke, strokeOpacity:1, strokeWeight:2,
+      fillColor:parcelFill, fillOpacity:.35, geodesic:true, map
+    });
+    poly.__name=raw.name;
+
+    const b=new google.maps.LatLngBounds();
+    coords.forEach(c=>{const ll=new google.maps.LatLng(c.lat,c.lng); b.extend(ll); allBounds.extend(ll);});
+    const path=coords.map(c=>new google.maps.LatLng(c.lat,c.lng));
+    const area=google.maps.geometry.spherical.computeArea(path);
+    totalArea += area;
+
+    const centroid=(()=>{let lat=0,lng=0;coords.forEach(c=>{lat+=c.lat;lng+=c.lng});return new google.maps.LatLng(lat/coords.length,lng/coords.length)})();
+    const iw=new google.maps.InfoWindow({content:`<div class="iw-green"><div>${raw.name}</div><div class="label">المساحة:</div> ${fmt(area)} م²</div>`});
+    poly.addListener('click',()=> iw.open({anchor:new google.maps.Marker({position:centroid,map,opacity:0}), map}));
+
+    const item=document.createElement('div');
+    item.className='card'; item.style.margin='8px 0';
+    item.innerHTML=`
+      <div class="parcel-header">
+        <span class="parcel-name">${raw.name}</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn secondary" data-act="toggle">إخفاء</button>
+          <button class="btn ghost" data-act="fit">تكبير</button>
+        </div>
+      </div>
+      <div class="stat-grid">
+        <div class="muted">المساحة</div><div>${fmt(area)} م²</div>
+      </div>`;
+    list.appendChild(item);
+
+    item.querySelector('[data-act="toggle"]').onclick=()=>{
+      const vis=!!poly.getMap(); poly.setMap(vis?null:map);
+      item.querySelector('[data-act="toggle"]').textContent=vis?'إظهار':'إخفاء';
+    };
+    item.querySelector('[data-act="fit"]').onclick=()=> map.fitBounds(b);
+
+    polygons.push({poly, bounds:b});
+  });
+
+  document.getElementById('totalArea').textContent=`الإجمالي: ${fmt(totalArea)} م²`;
+
+  document.getElementById('showAll').onclick=()=> polygons.forEach(o=>{ if(!o.poly.getMap()) o.poly.setMap(map); });
+  document.getElementById('hideAll').onclick=()=> polygons.forEach(o=> o.poly.setMap(null));
+  document.getElementById('fitAll').onclick=()=> { if(!allBounds.isEmpty()) map.fitBounds(allBounds); };
+  if(!allBounds.isEmpty()) map.fitBounds(allBounds);
+
+  // زر السهم للجوال
+  const side = document.getElementById('side');
+  const btn  = document.getElementById('toggleBtn');
+  const mq   = window.matchMedia('(max-width: 900px)');
+
+  function closePanel(){ side.classList.remove('open'); btn.textContent='◀'; btn.setAttribute('aria-label','فتح القائمة'); setTimeout(()=>google.maps.event.trigger(map,'resize'), 300); }
+  function openPanel(){  side.classList.add('open');    btn.textContent='▶'; btn.setAttribute('aria-label','إغلاق القائمة'); setTimeout(()=>google.maps.event.trigger(map,'resize'), 300); }
+
+  // مبدئيًا مغلق على الجوال
+  if (mq.matches) closePanel();
+
+  btn.onclick = ()=> side.classList.contains('open') ? closePanel() : openPanel();
+
+  // عند تكبير قطعة من القائمة في الجوال، أغلق اللوحة
+  document.getElementById('parcelsList').addEventListener('click', (e)=>{
+    if(e.target && e.target.getAttribute('data-act')==='fit' && mq.matches){
+      closePanel();
+    }
+  });
+
+  // لو تغيّر حجم الشاشة (تدوير مثلاً)
+  mq.addEventListener('change', (e)=>{ e.matches ? closePanel() : side.classList.remove('open'); });
+}
+
+(function loadMaps(){
+  if(!API_KEY||API_KEY==="YOUR_API_KEY_HERE"){
+    document.body.innerHTML="<div style='padding:20px;color:#fff;background:#b00020'>⚠️ أضيفي Google Maps API Key داخل الملف.</div>";
+    return;
+  }
+  const s=document.createElement('script');
+  s.src=`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(API_KEY)}&libraries=geometry`;
+  s.async=true; s.defer=true;
+  s.onload=()=>{ (typeof google==='undefined'||!google.maps) ? document.body.innerHTML="<div style='padding:20px;color:#fff;background:#b00020'>تعذّر تحميل خرائط جوجل.</div>" : initMap(); };
+  s.onerror=()=>{ document.body.innerHTML="<div style='padding:20px;color:#fff;background:#b00020'>فشل تحميل خرائط جوجل.</div>"; };
+  document.head.appendChild(s);
+})();
+</script>
+</html>
